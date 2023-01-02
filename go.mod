@@ -3,6 +3,7 @@ module rdiff
 go 1.19
 
 require (
+	github.com/smallnest/ringbuffer v0.0.0-20210227121335-0a58434b36f2
 	github.com/stretchr/testify v1.7.0
 	golang.org/x/crypto v0.0.0-20190122013713-64072686203f
 )

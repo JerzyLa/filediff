@@ -1,7 +1,6 @@
 package filediff
 
 import (
-	"bufio"
 	"bytes"
 	"fmt"
 	"io"
@@ -15,6 +14,7 @@ import (
 )
 
 var allTestCases = []string{
+	/// 000.old and 000.new files are the same
 	"000-blake2-512",
 	"001-blake2-512",
 	"002-blake2-512",
@@ -46,28 +46,6 @@ func argsFromTestName(name string) (file string, windowLen uint32, err error) {
 	windowLen = uint32(windowLen64)
 
 	return
-}
-
-type errorI interface {
-	// testing#T.Error || testing#B.Error
-	Error(args ...interface{})
-}
-
-func signature(t errorI, src io.Reader) *SignatureType {
-	var (
-		windowLen uint32 = 512
-		bufSize          = 65536
-	)
-
-	s, err := Signature(
-		bufio.NewReaderSize(src, bufSize),
-		io.Discard,
-		windowLen)
-	if err != nil {
-		t.Error(err)
-	}
-
-	return s
 }
 
 func TestSignature(t *testing.T) {
