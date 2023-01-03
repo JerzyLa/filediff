@@ -11,8 +11,10 @@ import (
 
 const (
 	// OpCopy copy data operation
+	// Used to copy bytes from the old data
 	OpCopy uint8 = 69
 	// OpLiteral literal data operation
+	// Used to add new bytes to the old data
 	OpLiteral uint8 = 65
 )
 
@@ -57,9 +59,9 @@ func Delta(signature *SignatureType, input io.Reader, output io.Writer) error {
 		}
 
 		// Check if the chunk is found in the signature
-		if chunkIndex, ok := signature.weak2block[rollingChecksum.Digest()]; ok {
+		if chunkIndex, ok := signature.rolling2chunk[rollingChecksum.Digest()]; ok {
 			strongChecksum := CalcStrongChecksum(chunk.Bytes())
-			if bytes.Equal(signature.strongSigs[chunkIndex], strongChecksum) {
+			if bytes.Equal(signature.strongChecksums[chunkIndex], strongChecksum) {
 				// Reset the chunk and rolling hash if match was found
 				chunk.Reset()
 				rollingChecksum.Reset()
@@ -204,7 +206,7 @@ func write(writer io.Writer, data uint64) error {
 	case 4:
 		return binary.Write(writer, binary.BigEndian, uint32(data))
 	case 8:
-		return binary.Write(writer, binary.BigEndian, uint64(data))
+		return binary.Write(writer, binary.BigEndian, data)
 	}
 	return fmt.Errorf("invalid size: %v", intSize(data))
 }

@@ -9,39 +9,26 @@ import (
 	"golang.org/x/crypto/blake2b"
 )
 
-type MagicNumber uint32
-
-const (
-	Blake2SigMagic MagicNumber = 0x72730137
-)
-
+// SignatureType stores rolling checksums and strong checksums
 type SignatureType struct {
-	sigType    MagicNumber
-	chunkSize  uint32
-	strongLen  uint32
-	strongSigs [][]byte
-	weak2block map[uint32]int
+	chunkSize       uint32
+	strongChecksums [][]byte
+	rolling2chunk   map[uint32]int
 }
 
+// CalcStrongChecksum calculates BLAKE2b-256 checksum
 func CalcStrongChecksum(data []byte) []byte {
 	d := blake2b.Sum256(data)
 	return d[:]
 }
 
-// Signature
-// https://rsync.samba.org/tech_report/node1.html
+// Signature calculates a signature from the given data
+// The algorithm reference: https://rsync.samba.org/tech_report/node2.html
 // 1. Split data to the fixed-size chunks
-// 2. Calculate rolling checksum and strong checksum and store them in binary and struct format
+// 2. Calculate rolling checksum and strong checksum
+// 3. Store checksums in the output and return the signature struct
 func Signature(input io.Reader, output io.Writer, chunkSize uint32) (*SignatureType, error) {
-	err := binary.Write(output, binary.BigEndian, Blake2SigMagic)
-	if err != nil {
-		return nil, err
-	}
-	err = binary.Write(output, binary.BigEndian, chunkSize)
-	if err != nil {
-		return nil, err
-	}
-	err = binary.Write(output, binary.BigEndian, uint32(32))
+	err := binary.Write(output, binary.BigEndian, chunkSize)
 	if err != nil {
 		return nil, err
 	}
@@ -49,9 +36,7 @@ func Signature(input io.Reader, output io.Writer, chunkSize uint32) (*SignatureT
 	data := make([]byte, chunkSize)
 
 	var ret SignatureType
-	ret.weak2block = make(map[uint32]int)
-	ret.sigType = Blake2SigMagic
-	ret.strongLen = 32
+	ret.rolling2chunk = make(map[uint32]int)
 	ret.chunkSize = chunkSize
 
 	for {
@@ -70,10 +55,13 @@ func Signature(input io.Reader, output io.Writer, chunkSize uint32) (*SignatureT
 		}
 
 		strong := CalcStrongChecksum(chunk)
-		output.Write(strong)
+		_, err = output.Write(strong)
+		if err != nil {
+			return nil, err
+		}
 
-		ret.weak2block[weak] = len(ret.strongSigs)
-		ret.strongSigs = append(ret.strongSigs, strong)
+		ret.rolling2chunk[weak] = len(ret.strongChecksums)
+		ret.strongChecksums = append(ret.strongChecksums, strong)
 	}
 
 	return &ret, nil
@@ -81,55 +69,41 @@ func Signature(input io.Reader, output io.Writer, chunkSize uint32) (*SignatureT
 
 // ReadSignature reads a signature from an io.Reader.
 func ReadSignature(r io.Reader) (*SignatureType, error) {
-	var magic MagicNumber
-	err := binary.Read(r, binary.BigEndian, &magic)
-	if err != nil {
-		return nil, err
-	}
-
 	var chunkSize uint32
-	err = binary.Read(r, binary.BigEndian, &chunkSize)
+	err := binary.Read(r, binary.BigEndian, &chunkSize)
 	if err != nil {
 		return nil, err
 	}
 
-	var strongLen uint32
-	err = binary.Read(r, binary.BigEndian, &strongLen)
-	if err != nil {
-		return nil, err
-	}
-
-	var strongSigs [][]byte
-	weak2block := map[uint32]int{}
+	var strongChecksums [][]byte
+	rolling2chunk := map[uint32]int{}
 
 	for {
-		var weakSum uint32
-		err = binary.Read(r, binary.BigEndian, &weakSum)
+		var rollingChecksum uint32
+		err = binary.Read(r, binary.BigEndian, &rollingChecksum)
 		if err == io.EOF {
 			break
 		} else if err != nil {
 			return nil, err
 		}
 
-		strongSum := make([]byte, strongLen)
-		n, err := r.Read(strongSum)
+		strongChecksum := make([]byte, 32)
+		n, err := r.Read(strongChecksum)
 		if err != nil {
 			return nil, err
 		}
-		if n != int(strongLen) {
-			return nil, fmt.Errorf("got only %d/%d bytes of the strong hash", n, strongLen)
+		if n != 32 {
+			return nil, fmt.Errorf("got only %d/%d bytes of the strong hash", n, 32)
 		}
 
-		weak2block[weakSum] = len(strongSigs)
-		strongSigs = append(strongSigs, strongSum)
+		rolling2chunk[rollingChecksum] = len(strongChecksums)
+		strongChecksums = append(strongChecksums, strongChecksum)
 	}
 
 	return &SignatureType{
-		sigType:    magic,
-		chunkSize:  chunkSize,
-		strongLen:  strongLen,
-		strongSigs: strongSigs,
-		weak2block: weak2block,
+		chunkSize:       chunkSize,
+		strongChecksums: strongChecksums,
+		rolling2chunk:   rolling2chunk,
 	}, nil
 }
 

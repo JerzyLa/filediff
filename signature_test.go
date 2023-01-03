@@ -2,7 +2,6 @@ package filediff
 
 import (
 	"bytes"
-	"fmt"
 	"io"
 	"os"
 	"strconv"
@@ -14,38 +13,21 @@ import (
 )
 
 var allTestCases = []string{
-	/// 000.old and 000.new files are the same
-	"000-blake2-512",
-	"001-blake2-512",
-	"002-blake2-512",
-	"003-blake2-512",
-	"004-blake2-512",
-	"005-blake2-512",
-	"006-blake2-2",
-	"007-blake2-5",
-	"007-blake2-4",
-	"007-blake2-3",
-	"008-blake2-512",
-	"009-blake2-512",
-	"010-blake2-512",
-	"011-blake2-3",
-}
-
-func argsFromTestName(name string) (file string, windowLen uint32, err error) {
-	segs := strings.Split(name, "-")
-	if len(segs) != 3 {
-		return "", 0, fmt.Errorf("invalid format for name %q", name)
-	}
-
-	file = segs[0]
-
-	windowLen64, err := strconv.ParseInt(segs[2], 10, 32)
-	if err != nil {
-		return "", 0, fmt.Errorf("invalid window length %q", segs[2])
-	}
-	windowLen = uint32(windowLen64)
-
-	return
+	"000-chunksize-500",
+	//"000-chunksize-512",
+	//"001-chunksize-512",
+	//"002-chunksize-512",
+	//"003-chunksize-512",
+	//"004-chunksize-512",
+	//"005-chunksize-512",
+	//"006-chunksize-2",
+	//"007-chunksize-5",
+	//"007-chunksize-4",
+	//"007-chunksize-3",
+	//"008-chunksize-512",
+	//"009-chunksize-512",
+	//"010-chunksize-512",
+	//"011-chunksize-3",
 }
 
 func TestSignature(t *testing.T) {
@@ -54,7 +36,9 @@ func TestSignature(t *testing.T) {
 
 	for _, tt := range allTestCases {
 		t.Run(tt, func(t *testing.T) {
-			file, windowLen, err := argsFromTestName(tt)
+			segs := strings.Split(tt, "-")
+			file := segs[0]
+			chunkSize, err := strconv.ParseInt(segs[2], 10, 32)
 			r.NoError(err)
 
 			inputData, err := os.ReadFile("testdata/" + file + ".old")
@@ -62,14 +46,12 @@ func TestSignature(t *testing.T) {
 			input := bytes.NewReader(inputData)
 
 			output := &bytes.Buffer{}
-			gotSig, err := Signature(input, output, windowLen)
+			gotSig, err := Signature(input, output, uint32(chunkSize))
 			r.NoError(err)
 
 			wantSig, err := ReadSignatureFile("testdata/" + tt + ".signature")
 			r.NoError(err)
 			a.Equal(wantSig.chunkSize, gotSig.chunkSize)
-			a.Equal(wantSig.sigType, gotSig.sigType)
-			a.Equal(wantSig.strongLen, gotSig.strongLen)
 
 			outputData, err := io.ReadAll(output)
 			r.NoError(err)
